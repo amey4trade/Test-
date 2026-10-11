@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from tabulate import tabulate
 
-def fetch_or_generate_nifty_option_chain():
+def fetch_or_generate_nifty_option_chain(num_strikes=10):
     """
-    Returns Nifty 50 spot price, ATM strike, and option chain DataFrame near ATM.
-    Includes Call/Put OI, LTP, Bid Price, and Ask Price.
+    Generates Nifty 50 Option Chain table up to `num_strikes` around ATM.
+    Columns included: Call OI, Call OI Change, Call Volume, Call LTP,
+                     Strike Price,
+                     Put LTP, Put Volume, Put OI Change, Put OI.
     """
     spot_price = 22520.45
     try:
@@ -16,19 +18,20 @@ def fetch_or_generate_nifty_option_chain():
         if live_price and not np.isnan(live_price):
             spot_price = round(live_price, 2)
     except Exception as e:
-        print(f"Using default spot price due to fetch notice: {e}")
+        pass
 
     # Calculate ATM strike rounded to nearest 50 points
     atm_strike = int(round(spot_price / 50.0) * 50)
 
-    # Generate strikes around ATM (-200 to +200)
-    strikes = [atm_strike + i * 50 for i in range(-4, 5)]
+    # Calculate strikes range around ATM for 10 strikes (e.g. 5 below, 5 above)
+    half_strikes = num_strikes // 2
+    strikes = [atm_strike + i * 50 for i in range(-half_strikes, num_strikes - half_strikes)]
 
     data = []
     for strike in strikes:
         diff = strike - spot_price
 
-        # Calculate realistic option prices
+        # Calculate option prices
         if diff < 0:
             call_ltp = abs(diff) + 110.0 - abs(diff) * 0.15
             put_ltp = max(10.0, 110.0 - abs(diff) * 0.45)
@@ -36,14 +39,15 @@ def fetch_or_generate_nifty_option_chain():
             call_ltp = max(10.0, 110.0 - abs(diff) * 0.45)
             put_ltp = diff + 110.0 - diff * 0.15
 
-        call_bid = max(0.05, call_ltp - 0.50)
-        call_ask = call_ltp + 0.50
-        put_bid = max(0.05, put_ltp - 0.50)
-        put_ask = put_ltp + 0.50
-
-        # Standard simulated OI distribution around ATM
+        # Calculate Open Interest, OI Change, Volume
         call_oi = int(3500000 * np.exp(-((strike - atm_strike)**2) / (2 * 150**2)) + 500000)
         put_oi = int(3800000 * np.exp(-((strike - atm_strike)**2) / (2 * 150**2)) + 600000)
+
+        call_oi_chg = int(call_oi * (0.05 + 0.02 * np.sin(strike)))
+        put_oi_chg = int(put_oi * (0.06 + 0.02 * np.cos(strike)))
+
+        call_volume = int(call_oi * 0.35 + 120000)
+        put_volume = int(put_oi * 0.38 + 140000)
 
         strike_label = f"{strike:,}"
         if strike == atm_strike:
@@ -51,13 +55,13 @@ def fetch_or_generate_nifty_option_chain():
 
         data.append({
             "Call OI": f"{call_oi:,}",
-            "Call Bid (₹)": f"{call_bid:.2f}",
-            "Call Ask (₹)": f"{call_ask:.2f}",
+            "Call OI Chg": f"{call_oi_chg:+,}",
+            "Call Vol": f"{call_volume:,}",
             "Call LTP (₹)": f"{call_ltp:.2f}",
             "Strike Price": strike_label,
             "Put LTP (₹)": f"{put_ltp:.2f}",
-            "Put Bid (₹)": f"{put_bid:.2f}",
-            "Put Ask (₹)": f"{put_ask:.2f}",
+            "Put Vol": f"{put_volume:,}",
+            "Put OI Chg": f"{put_oi_chg:+,}",
             "Put OI": f"{put_oi:,}"
         })
 
@@ -65,62 +69,21 @@ def fetch_or_generate_nifty_option_chain():
     return spot_price, atm_strike, df
 
 
-def plot_option_chain_table(spot_price, atm_strike, df, output_filename="nifty_option_chain.png"):
-    fig, ax = plt.subplots(figsize=(15, 6.5))
-    ax.axis('tight')
-    ax.axis('off')
+def display_option_chain_table():
+    spot, atm, df = fetch_or_generate_nifty_option_chain(num_strikes=10)
 
-    # Add header title and metadata
-    title_text = f"NIFTY 50 Option Chain (ATM Calls & Puts: Prices, Bid/Ask & Open Interest)\nSpot Price: {spot_price:,} | ATM Strike: {atm_strike:,}"
-    plt.title(title_text, fontsize=14, fontweight='bold', pad=22, color='#1A237E')
+    header = f"NIFTY 50 Option Chain (Spot Price: {spot:,.2f} | ATM Strike: {atm:,})"
+    divider = "=" * len(header)
 
-    # Create table
-    table = ax.table(
-        cellText=df.values,
-        colLabels=df.columns,
-        cellLoc='center',
-        loc='center'
-    )
+    print(f"\n{divider}")
+    print(header)
+    print(f"{divider}\n")
 
-    table.auto_set_font_size(False)
-    table.set_fontsize(9.5)
-    table.scale(1.15, 2.0)
-
-    # Style table headers and rows
-    for (row, col), cell in table.get_celld().items():
-        cell.set_linewidth(0.8)
-        cell.set_edgecolor('#D0D0D0')
-
-        if row == 0:
-            # Header styling
-            cell.set_facecolor('#1A237E')
-            cell.get_text().set_color('white')
-            cell.get_text().set_weight('bold')
-            cell.get_text().set_fontsize(10.5)
-        else:
-            data_row_idx = row - 1
-            strike_val = df.iloc[data_row_idx]['Strike Price']
-
-            if "(ATM)" in strike_val:
-                # ATM Row highlight
-                cell.set_facecolor('#FFF9C4')  # Soft yellow highlight
-                cell.get_text().set_weight('bold')
-            elif data_row_idx % 2 == 0:
-                cell.set_facecolor('#F8F9FA')  # Alternating light background
-            else:
-                cell.set_facecolor('#FFFFFF')
-
-    plt.tight_layout()
-    plt.savefig(output_filename, dpi=200, bbox_inches='tight')
-    plt.close()
-    print(f"Successfully saved table plot to '{output_filename}'.")
+    table_str = tabulate(df, headers='keys', tablefmt='fancy_grid', showindex=False)
+    print(table_str)
+    print("\n" + divider + "\n")
+    return df
 
 
 if __name__ == "__main__":
-    spot, atm, df = fetch_or_generate_nifty_option_chain()
-    print("\n=================== NIFTY 50 OPTION CHAIN ===================")
-    print(f"Spot Price: {spot} | ATM Strike: {atm}\n")
-    print(df.to_string(index=False))
-    print("=============================================================\n")
-
-    plot_option_chain_table(spot, atm, df)
+    display_option_chain_table()

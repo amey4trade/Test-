@@ -5,8 +5,8 @@ import numpy as np
 
 def fetch_or_generate_nifty_option_chain():
     """
-    Returns Nifty 50 spot price and option chain DataFrame near ATM.
-    Attempts to get live spot price via yfinance or uses realistic market benchmark.
+    Returns Nifty 50 spot price, ATM strike, and option chain DataFrame near ATM.
+    Includes Call/Put OI, LTP, Bid Price, and Ask Price.
     """
     spot_price = 22520.45
     try:
@@ -28,15 +28,18 @@ def fetch_or_generate_nifty_option_chain():
     for strike in strikes:
         diff = strike - spot_price
 
-        # Calculate realistic option prices (Black-Scholes approximation / Intrinsic + Extrinsic)
+        # Calculate realistic option prices
         if diff < 0:
-            # ITM Call, OTM Put
             call_ltp = abs(diff) + 110.0 - abs(diff) * 0.15
             put_ltp = max(10.0, 110.0 - abs(diff) * 0.45)
         else:
-            # OTM Call, ITM Put
             call_ltp = max(10.0, 110.0 - abs(diff) * 0.45)
             put_ltp = diff + 110.0 - diff * 0.15
+
+        call_bid = max(0.05, call_ltp - 0.50)
+        call_ask = call_ltp + 0.50
+        put_bid = max(0.05, put_ltp - 0.50)
+        put_ask = put_ltp + 0.50
 
         # Standard simulated OI distribution around ATM
         call_oi = int(3500000 * np.exp(-((strike - atm_strike)**2) / (2 * 150**2)) + 500000)
@@ -47,11 +50,15 @@ def fetch_or_generate_nifty_option_chain():
             strike_label += " (ATM)"
 
         data.append({
-            "Call Open Interest (OI)": f"{call_oi:,}",
+            "Call OI": f"{call_oi:,}",
+            "Call Bid (₹)": f"{call_bid:.2f}",
+            "Call Ask (₹)": f"{call_ask:.2f}",
             "Call LTP (₹)": f"{call_ltp:.2f}",
             "Strike Price": strike_label,
             "Put LTP (₹)": f"{put_ltp:.2f}",
-            "Put Open Interest (OI)": f"{put_oi:,}"
+            "Put Bid (₹)": f"{put_bid:.2f}",
+            "Put Ask (₹)": f"{put_ask:.2f}",
+            "Put OI": f"{put_oi:,}"
         })
 
     df = pd.DataFrame(data)
@@ -59,13 +66,13 @@ def fetch_or_generate_nifty_option_chain():
 
 
 def plot_option_chain_table(spot_price, atm_strike, df, output_filename="nifty_option_chain.png"):
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(15, 6.5))
     ax.axis('tight')
     ax.axis('off')
 
     # Add header title and metadata
-    title_text = f"NIFTY 50 Option Chain (ATM Call/Put Prices & Open Interest)\nSpot Price: {spot_price:,} | ATM Strike: {atm_strike:,}"
-    plt.title(title_text, fontsize=14, fontweight='bold', pad=20, color='#1A237E')
+    title_text = f"NIFTY 50 Option Chain (ATM Calls & Puts: Prices, Bid/Ask & Open Interest)\nSpot Price: {spot_price:,} | ATM Strike: {atm_strike:,}"
+    plt.title(title_text, fontsize=14, fontweight='bold', pad=22, color='#1A237E')
 
     # Create table
     table = ax.table(
@@ -76,13 +83,10 @@ def plot_option_chain_table(spot_price, atm_strike, df, output_filename="nifty_o
     )
 
     table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1.2, 2.0)
+    table.set_fontsize(9.5)
+    table.scale(1.15, 2.0)
 
     # Style table headers and rows
-    num_cols = len(df.columns)
-    num_rows = len(df)
-
     for (row, col), cell in table.get_celld().items():
         cell.set_linewidth(0.8)
         cell.set_edgecolor('#D0D0D0')
@@ -92,7 +96,7 @@ def plot_option_chain_table(spot_price, atm_strike, df, output_filename="nifty_o
             cell.set_facecolor('#1A237E')
             cell.get_text().set_color('white')
             cell.get_text().set_weight('bold')
-            cell.get_text().set_fontsize(11)
+            cell.get_text().set_fontsize(10.5)
         else:
             data_row_idx = row - 1
             strike_val = df.iloc[data_row_idx]['Strike Price']
@@ -102,7 +106,7 @@ def plot_option_chain_table(spot_price, atm_strike, df, output_filename="nifty_o
                 cell.set_facecolor('#FFF9C4')  # Soft yellow highlight
                 cell.get_text().set_weight('bold')
             elif data_row_idx % 2 == 0:
-                cell.set_facecolor('#F5F5F5')  # Alternating row background
+                cell.set_facecolor('#F8F9FA')  # Alternating light background
             else:
                 cell.set_facecolor('#FFFFFF')
 

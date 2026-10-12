@@ -1,2 +1,4 @@
 *.png
 __pycache__/
+flask.pid
+flask_app.log

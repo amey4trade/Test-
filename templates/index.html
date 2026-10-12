@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NIFTY Option Chain Analytics</title>
+  <!-- Bootstrap 5 CSS & FontAwesome Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    :root {
+      --bg-color: #0b0e14;
+      --card-bg: #151a23;
+      --border-color: #262d3d;
+      --text-main: #e2e8f0;
+      --text-muted: #94a3b8;
+      --call-bg: rgba(16, 185, 129, 0.08);
+      --call-border: #10b981;
+      --put-bg: rgba(239, 68, 68, 0.08);
+      --put-border: #ef4444;
+      --atm-bg: #2d3748;
+      --atm-highlight: #f59e0b;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding-bottom: 2rem;
+    }
+
+    .navbar-brand {
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-live {
+      background-color: #10b981;
+      color: #000;
+      font-weight: 600;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+
+    .info-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .spot-badge {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .table-container {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .table-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .table-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .timer-badge {
+      background-color: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 20px;
+      padding: 0.2rem 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .custom-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 0.88rem;
+      margin-bottom: 0;
+    }
+
+    .custom-table th {
+      background-color: #1c2331;
+      color: #cbd5e1;
+      font-weight: 600;
+      text-align: center;
+      padding: 0.65rem 0.4rem;
+      border-bottom: 2px solid var(--border-color);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .custom-table th.call-group {
+      background-color: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border-bottom: 2px solid var(--call-border);
+    }
+
+    .custom-table th.put-group {
+      background-color: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border-bottom: 2px solid var(--put-border);
+    }
+
+    .custom-table th.strike-group {
+      background-color: #273043;
+      color: #fbbf24;
+    }
+
+    .custom-table td {
+      padding: 0.55rem 0.4rem;
+      text-align: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .custom-table tr:hover td {
+      background-color: rgba(255, 255, 255, 0.04) !important;
+    }
+
+    .call-col {
+      background-color: var(--call-bg);
+    }
+
+    .put-col {
+      background-color: var(--put-bg);
+    }
+
+    .strike-col {
+      font-weight: 700;
+      background-color: #1e2638;
+      color: #f1f5f9;
+    }
+
+    .tr-atm td {
+      background-color: rgba(245, 158, 11, 0.2) !important;
+      font-weight: 700;
+      color: #fef08a !important;
+    }
+
+    .tr-atm .strike-col {
+      background-color: #f59e0b !important;
+      color: #000 !important;
+      font-weight: 800;
+      border-radius: 4px;
+    }
+
+    .pos-val {
+      color: #34d399;
+    }
+
+    .neg-val {
+      color: #f87171;
+    }
+
+    .ltp-val {
+      font-weight: 700;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spinner-border .75s linear infinite;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navbar -->
+  <nav class="navbar navbar-dark bg-dark border-bottom border-secondary px-3 mb-3">
+    <div class="container-fluid">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <i class="fa-solid me-1 fa-chart-line text-warning"></i> NIFTY Option Chain Live
+      </a>
+      <div class="d-flex align-items-center gap-3">
+        <span class="badge badge-live px-2 py-1 rounded">LIVE SENSISCRAPE</span>
+        <span class="text-muted small" id="global-timestamp"><i class="fa-regular fa-clock me-1"></i> Syncing...</span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid px-4">
+    <!-- Spot Info Banner -->
+    <div class="info-card d-flex flex-wrap align-items-center justify-content-between gap-3">
+      <div>
+        <span class="text-muted small text-uppercase d-block mb-1">Underlying Symbol</span>
+        <h4 class="mb-0 fw-bold text-white">NIFTY 50 <span class="fs-6 text-muted font-normal">(Expiry: 2026-10-13)</span></h4>
+      </div>
+      <div>
+        <span class="text-muted small text-uppercase d-block mb-1">Spot Price (LTP)</span>
+        <span class="spot-badge" id="spot-price-display">--.--</span>
+      </div>
+      <div>
+        <span class="text-muted small text-uppercase d-block mb-1">ATM Strike Price</span>
+        <span class="badge bg-warning text-dark fs-6 fw-bold px-3 py-2" id="atm-strike-display">--</span>
+      </div>
+      <div>
+        <span class="text-muted small text-uppercase d-block mb-1">Source URL</span>
+        <a href="https://web.sensibull.com/option-chain?tradingsymbol=NIFTY&expiry=2026-10-13" target="_blank" class="text-info text-decoration-none small">
+          <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Sensibull Option Chain
+        </a>
+      </div>
+    </div>
+
+    <!-- Dual Option Chain Tables -->
+    <div class="row g-4">
+
+      <!-- Table 1: 1-Minute Refresh -->
+      <div class="col-xl-6">
+        <div class="table-container">
+          <div class="table-header-bar">
+            <div class="table-title text-success">
+              <i class="fa-solid fa-bolt"></i> Table 1 (1 Min Refresh)
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="timer-badge" id="timer-1m"><i class="fa-solid fa-spinner loading-spinner me-1"></i> Next: --s</span>
+              <span class="text-muted small ms-1" id="updated-1m">Updated: --</span>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="custom-table" id="table-1m">
+              <thead>
+                <tr>
+                  <th colspan="5" class="call-group"><i class="fa-solid fa-arrow-trend-up me-1"></i> CALLS (CE)</th>
+                  <th class="strike-group">STRIKE</th>
+                  <th colspan="5" class="put-group"><i class="fa-solid fa-arrow-trend-down me-1"></i> PUTS (PE)</th>
+                </tr>
+                <tr>
+                  <th class="call-group">Delta</th>
+                  <th class="call-group">Volume</th>
+                  <th class="call-group">OI Chg</th>
+                  <th class="call-group">OI (L)</th>
+                  <th class="call-group">LTP (₹)</th>
+                  <th class="strike-group">Strike</th>
+                  <th class="put-group">LTP (₹)</th>
+                  <th class="put-group">OI (L)</th>
+                  <th class="put-group">OI Chg</th>
+                  <th class="put-group">Volume</th>
+                  <th class="put-group">Delta</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-1m">
+                <tr><td colspan="11" class="text-center py-4 text-muted"><i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading 1-min Option Chain...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table 2: 3-Minute Refresh -->
+      <div class="col-xl-6">
+        <div class="table-container">
+          <div class="table-header-bar">
+            <div class="table-title text-primary">
+              <i class="fa-solid fa-clock-rotate-left"></i> Table 2 (3 Min Refresh)
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="timer-badge" id="timer-3m"><i class="fa-solid fa-spinner loading-spinner me-1"></i> Next: --s</span>
+              <span class="text-muted small ms-1" id="updated-3m">Updated: --</span>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="custom-table" id="table-3m">
+              <thead>
+                <tr>
+                  <th colspan="5" class="call-group"><i class="fa-solid fa-arrow-trend-up me-1"></i> CALLS (CE)</th>
+                  <th class="strike-group">STRIKE</th>
+                  <th colspan="5" class="put-group"><i class="fa-solid fa-arrow-trend-down me-1"></i> PUTS (PE)</th>
+                </tr>
+                <tr>
+                  <th class="call-group">Delta</th>
+                  <th class="call-group">Volume</th>
+                  <th class="call-group">OI Chg</th>
+                  <th class="call-group">OI (L)</th>
+                  <th class="call-group">LTP (₹)</th>
+                  <th class="strike-group">Strike</th>
+                  <th class="put-group">LTP (₹)</th>
+                  <th class="put-group">OI (L)</th>
+                  <th class="put-group">OI Chg</th>
+                  <th class="put-group">Volume</th>
+                  <th class="put-group">Delta</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-3m">
+                <tr><td colspan="11" class="text-center py-4 text-muted"><i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading 3-min Option Chain...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- JavaScript logic for API polling & real-time timer countdown -->
+  <script>
+    let countdowns = { '1m': 60, '3m': 180 };
+
+    function formatNumber(num) {
+      if (!num) return '--';
+      return num;
+    }
+
+    function renderTableRows(tbodyId, rows) {
+      const tbody = document.getElementById(tbodyId);
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-3 text-muted">No data available</td></tr>';
+        return;
+      }
+
+      let html = '';
+      rows.forEach(r => {
+        const atmClass = r.is_atm ? 'tr-atm' : '';
+        const strikeLabel = r.is_atm ? `${r.strike} <span class="badge bg-dark text-warning ms-1" style="font-size:0.65rem">ATM</span>` : r.strike;
+
+        // Color coding OI Change
+        const callOiChgClass = r.call_oi_chg.includes('-') ? 'neg-val' : 'pos-val';
+        const putOiChgClass = r.put_oi_chg.includes('-') ? 'neg-val' : 'pos-val';
+
+        html += `
+          <tr class="${atmClass}">
+            <td class="call-col">${r.call_delta}</td>
+            <td class="call-col">${r.call_volume}</td>
+            <td class="call-col ${callOiChgClass}">${r.call_oi_chg}</td>
+            <td class="call-col fw-semibold">${r.call_oi}</td>
+            <td class="call-col ltp-val text-success">₹${r.call_ltp}</td>
+            <td class="strike-col">${strikeLabel}</td>
+            <td class="put-col ltp-val text-danger">₹${r.put_ltp}</td>
+            <td class="put-col fw-semibold">${r.put_oi}</td>
+            <td class="put-col ${putOiChgClass}">${r.put_oi_chg}</td>
+            <td class="put-col">${r.put_volume}</td>
+            <td class="put-col">${r.put_delta}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    }
+
+    async function fetchTableData(interval) {
+      try {
+        const response = await fetch(`/api/data?table=${interval}`);
+        const json = await response.json();
+
+        // Update header info banner from 1m dataset
+        if (json.spot_price) {
+          document.getElementById('spot-price-display').innerText = `₹${json.spot_price.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+          document.getElementById('atm-strike-display').innerText = `${json.atm_strike}`;
+          document.getElementById('global-timestamp').innerHTML = `<i class="fa-regular fa-clock me-1"></i> Last Sync: ${json.timestamp}`;
+        }
+
+        renderTableRows(`tbody-${interval}`, json.data);
+        document.getElementById(`updated-${interval}`).innerText = `Updated: ${json.last_updated_time}`;
+
+        // Reset countdown timer
+        countdowns[interval] = json.next_update_seconds || (interval === '1m' ? 60 : 180);
+      } catch (err) {
+        console.error(`Error fetching ${interval} option chain:`, err);
+      }
+    }
+
+    function updateTimers() {
+      ['1m', '3m'].forEach(i => {
+        if (countdowns[i] > 0) {
+          countdowns[i]--;
+        } else {
+          // Trigger data refresh when timer reaches 0
+          fetchTableData(i);
+          countdowns[i] = (i === '1m' ? 60 : 180);
+        }
+        document.getElementById(`timer-${i}`).innerHTML = `<i class="fa-solid fa-rotate me-1"></i> Next: ${countdowns[i]}s`;
+      });
+    }
+
+    // Initial fetch on page load
+    fetchTableData('1m');
+    fetchTableData('3m');
+
+    // Run countdown every second
+    setInterval(updateTimers, 1000);
+  </script>
+</body>
+</html>
